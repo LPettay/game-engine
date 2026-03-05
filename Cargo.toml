@@ -1,0 +1,33 @@
+[package]
+name = "genesis-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Planet-scale exploration game — The Da Vinci Method"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_asset", "bevy_render", "bevy_pbr", "bevy_core_pipeline",
+    "bevy_winit", "bevy_state", "bevy_gizmos", "bevy_log",
+    "x11",  # X11 for WSL2 (avoids wayland dep)
+] }
+bevy_egui = "0.39"
+bevy_rapier3d = "0.33"
+noise = "0.9"
+bytemuck = { version = "1.14", features = ["derive"] }
+futures-lite = "2.6"
+
+# SpacetimeDB (client SDK for multiplayer) — add when Task #3 begins
+# spacetimedb-sdk = "2.0"
+
+[dev-dependencies]
+# Testing utilities
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
