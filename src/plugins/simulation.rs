@@ -16,7 +16,6 @@ impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SimulationConfig>()
            .init_resource::<SimulationTime>()
-           .init_resource::<DifficultyConfig>()
            .add_message::<SimulationEvent>()
            .add_systems(Update, (
                update_simulation_time,
@@ -57,15 +56,6 @@ impl Default for SimulationConfig {
 /// Simulation mode determines how time flows
 #[derive(Clone, Debug, PartialEq)]
 pub enum SimulationMode {
-    /// Pre-bake mode: Accelerated simulation for generating history
-    PreBake {
-        /// Target universe age to simulate until (in seconds since Big Bang)
-        target_age: f64,
-        /// How many universe-years pass per real second
-        years_per_second: f64,
-        /// Current progress (0.0 to 1.0)
-        progress: f64,
-    },
     /// Runtime mode: Normal gameplay with time compression
     Runtime {
         /// Time compression factor (default: 24.0 = 1 real hour becomes 1 in-game day)
@@ -76,35 +66,23 @@ pub enum SimulationMode {
 }
 
 impl SimulationMode {
-    /// Create a pre-bake mode for generating 4.5 billion years of history
-    pub fn earth_like_prebake() -> Self {
-        Self::PreBake {
-            target_age: 4.5e9 * 365.25 * 24.0 * 3600.0, // 4.5 billion years in seconds
-            years_per_second: 1e9, // 1 billion years per real second
-            progress: 0.0,
-        }
-    }
-    
     /// Standard runtime mode with 24x time compression
     pub fn standard_runtime() -> Self {
         Self::Runtime {
             time_compression: 24.0,
         }
     }
-    
+
     /// Accelerated runtime for faster progression
     pub fn accelerated_runtime() -> Self {
         Self::Runtime {
             time_compression: 168.0, // 1 real hour = 1 in-game week
         }
     }
-    
+
     /// Get the time multiplier for this mode
     pub fn time_multiplier(&self) -> f64 {
         match self {
-            SimulationMode::PreBake { years_per_second, .. } => {
-                years_per_second * 365.25 * 24.0 * 3600.0 // Convert years/sec to seconds/sec
-            }
             SimulationMode::Runtime { time_compression } => *time_compression,
             SimulationMode::Creative => 1.0,
         }
@@ -222,68 +200,6 @@ pub enum Season {
     Winter,
 }
 
-/// Difficulty modifiers that affect gameplay speed
-#[derive(Resource, Clone)]
-pub struct DifficultyConfig {
-    /// Multiplier for resource gathering speed (> 1.0 = faster/easier)
-    pub resource_multiplier: f64,
-    /// Multiplier for survival needs decay rate (< 1.0 = slower/easier)
-    pub survival_leniency: f64,
-    /// Multiplier for discovery/learning speed (> 1.0 = faster)
-    pub learning_rate: f64,
-    /// Multiplier for crafting time (< 1.0 = faster)
-    pub crafting_speed: f64,
-    /// Enable/disable permadeath
-    pub permadeath: bool,
-}
-
-impl Default for DifficultyConfig {
-    fn default() -> Self {
-        Self {
-            resource_multiplier: 2.0,   // Resources gather 2x faster than reality
-            survival_leniency: 0.5,     // Hunger/thirst decay at half speed
-            learning_rate: 2.0,         // Discoveries happen 2x faster
-            crafting_speed: 0.25,       // Crafting is 4x faster than reality
-            permadeath: false,
-        }
-    }
-}
-
-impl DifficultyConfig {
-    pub fn easy() -> Self {
-        Self {
-            resource_multiplier: 4.0,
-            survival_leniency: 0.25,
-            learning_rate: 4.0,
-            crafting_speed: 0.1,
-            permadeath: false,
-        }
-    }
-    
-    pub fn normal() -> Self {
-        Self::default()
-    }
-    
-    pub fn hard() -> Self {
-        Self {
-            resource_multiplier: 1.0,
-            survival_leniency: 1.0,
-            learning_rate: 1.0,
-            crafting_speed: 1.0,
-            permadeath: false,
-        }
-    }
-    
-    pub fn hardcore() -> Self {
-        Self {
-            resource_multiplier: 0.5,
-            survival_leniency: 1.5,
-            learning_rate: 0.5,
-            crafting_speed: 2.0,
-            permadeath: true,
-        }
-    }
-}
 
 /// Events that affect simulation state
 #[derive(Message)]
@@ -296,11 +212,6 @@ pub enum SimulationEvent {
     TogglePause,
     /// Change simulation mode
     SetMode(SimulationMode),
-    /// Pre-bake phase completed
-    PreBakeComplete {
-        final_age: f64,
-        duration: Duration,
-    },
     /// New day started (for day/night cycle)
     NewDay { day_number: u32 },
     /// New year started
@@ -324,25 +235,6 @@ fn update_simulation_time(
     sim_time.real_elapsed += Duration::from_secs_f64(real_dt);
     
     match &mut sim_config.mode {
-        SimulationMode::PreBake { target_age, years_per_second, progress } => {
-            // In pre-bake mode, advance time rapidly
-            let universe_dt = real_dt * *years_per_second * 365.25 * 24.0 * 3600.0;
-            sim_time.universe_age += universe_dt;
-            sim_time.simulation_elapsed += universe_dt;
-            
-            // Update progress
-            *progress = (sim_time.universe_age / *target_age).min(1.0);
-            
-            // Check if pre-bake is complete
-            if sim_time.universe_age >= *target_age {
-                events.write(SimulationEvent::PreBakeComplete {
-                    final_age: sim_time.universe_age,
-                    duration: sim_time.real_elapsed,
-                });
-                // Switch to runtime mode
-                sim_config.mode = SimulationMode::standard_runtime();
-            }
-        }
         SimulationMode::Runtime { time_compression } => {
             // In runtime mode, advance time with compression
             let universe_dt = real_dt * *time_compression;
@@ -409,11 +301,6 @@ fn process_simulation_events(
                 sim_config.mode = mode.clone();
                 info!("[Simulation] Mode changed to {:?}", mode);
             }
-            SimulationEvent::PreBakeComplete { final_age, duration } => {
-                let years = final_age / (365.25 * 24.0 * 3600.0);
-                info!("[Simulation] Pre-bake complete: {:.2} billion years in {:?}", 
-                      years / 1e9, duration);
-            }
             SimulationEvent::NewDay { day_number } => {
                 // Could trigger day-based events here
                 if *day_number % 30 == 0 {
@@ -426,69 +313,6 @@ fn process_simulation_events(
             SimulationEvent::SeasonChanged { new_season } => {
                 info!("[Simulation] Season changed to {:?}", new_season);
             }
-        }
-    }
-}
-
-/// Helper trait for applying difficulty modifiers
-pub trait DifficultyAdjusted {
-    fn apply_resource_modifier(&self, base_value: f64, difficulty: &DifficultyConfig) -> f64;
-    fn apply_survival_modifier(&self, base_decay: f64, difficulty: &DifficultyConfig) -> f64;
-    fn apply_learning_modifier(&self, base_rate: f64, difficulty: &DifficultyConfig) -> f64;
-    fn apply_crafting_modifier(&self, base_time: f64, difficulty: &DifficultyConfig) -> f64;
-}
-
-impl DifficultyAdjusted for f64 {
-    fn apply_resource_modifier(&self, base_value: f64, difficulty: &DifficultyConfig) -> f64 {
-        base_value * difficulty.resource_multiplier
-    }
-    
-    fn apply_survival_modifier(&self, base_decay: f64, difficulty: &DifficultyConfig) -> f64 {
-        base_decay * difficulty.survival_leniency
-    }
-    
-    fn apply_learning_modifier(&self, base_rate: f64, difficulty: &DifficultyConfig) -> f64 {
-        base_rate * difficulty.learning_rate
-    }
-    
-    fn apply_crafting_modifier(&self, base_time: f64, difficulty: &DifficultyConfig) -> f64 {
-        base_time * difficulty.crafting_speed
-    }
-}
-
-/// Component for entities that need time-based updates
-#[derive(Component)]
-pub struct TimeDependent {
-    /// Last update tick
-    pub last_tick: u64,
-    /// Update frequency (ticks between updates)
-    pub update_frequency: u64,
-}
-
-impl Default for TimeDependent {
-    fn default() -> Self {
-        Self {
-            last_tick: 0,
-            update_frequency: 1, // Update every tick
-        }
-    }
-}
-
-impl TimeDependent {
-    pub fn every_n_ticks(n: u64) -> Self {
-        Self {
-            last_tick: 0,
-            update_frequency: n,
-        }
-    }
-    
-    /// Check if this entity should update this tick
-    pub fn should_update(&mut self, current_tick: u64) -> bool {
-        if current_tick >= self.last_tick + self.update_frequency {
-            self.last_tick = current_tick;
-            true
-        } else {
-            false
         }
     }
 }

@@ -202,30 +202,14 @@ fn player_movement_system(
                 transform.rotate_local_y(-rotation_speed);
             }
 
-            // Roll (Q/E) - Rotate around Local Z (Forward?)
-            // If Capsule is Y-up, Forward is -Z.
-            // So Roll is around Y? No, Roll is around "Forward" axis.
-            // If we fly "Up" (Y), then Roll is around Y? No, that's Yaw.
-            // Let's clarify orientation:
-            // Capsule stands on Y.
-            // "Forward" for movement is Y (Thrust).
-            // So "Roll" is rotation around Y.
-            // "Pitch" is rotation around X.
-            // "Yaw" is rotation around Z.
-
-            // Wait, if "Up" is thrust, then:
-            // Roll = Rotate around Y.
-            // Pitch = Rotate around X.
-            // Yaw = Rotate around Z.
-
-            // Let's remap based on standard rocket controls where "Up" is the nose.
-
-            // Q/E = Roll (Around Y)
+            // Roll (Q/E) — Capsule is Y-up, A/D occupies Y for yaw.
+            // Roll = rotation around Z (perpendicular to both thrust and yaw axes).
+            // Q/E = Roll (Around Z — forward axis for Y-up capsule)
             if keyboard_input.pressed(KeyCode::KeyQ) {
-                 transform.rotate_local_y(rotation_speed);
+                 transform.rotate_local_z(rotation_speed);
             }
             if keyboard_input.pressed(KeyCode::KeyE) {
-                 transform.rotate_local_y(-rotation_speed);
+                 transform.rotate_local_z(-rotation_speed);
             }
 
         }

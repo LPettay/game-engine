@@ -24,7 +24,7 @@ impl Plugin for DiscoveryPlugin {
            .add_systems(Update, (
                process_discovery_events,
                check_tech_unlocks,
-           ).chain());
+           ).chain().run_if(in_state(crate::GameState::Playing)));
     }
 }
 
@@ -133,12 +133,6 @@ pub struct Discovery {
 pub struct GlobalKnowledgeBase {
     /// All phenomena that have been discovered by anyone
     pub discoveries: HashMap<PhenomenonId, Discovery>,
-    /// Published research papers
-    pub research: Vec<ResearchPaper>,
-    /// Teaching materials
-    pub lessons: Vec<Lesson>,
-    /// Blueprints (practical applications)
-    pub blueprints: Vec<Blueprint>,
 }
 
 impl GlobalKnowledgeBase {
@@ -156,46 +150,6 @@ impl GlobalKnowledgeBase {
     pub fn record_discovery(&mut self, discovery: Discovery) {
         self.discoveries.insert(discovery.phenomenon, discovery);
     }
-}
-
-/// A published research paper
-#[derive(Clone, Debug)]
-pub struct ResearchPaper {
-    pub title: String,
-    pub author: u64,
-    pub phenomena: Vec<PhenomenonId>,
-    pub content: String,
-    pub citations: u32,
-    pub timestamp: f64,
-}
-
-/// A teaching lesson
-#[derive(Clone, Debug)]
-pub struct Lesson {
-    pub title: String,
-    pub teacher: u64,
-    pub phenomenon: PhenomenonId,
-    pub content: String,
-    pub difficulty: LessonDifficulty,
-}
-
-#[derive(Clone, Debug)]
-pub enum LessonDifficulty {
-    Beginner,
-    Intermediate,
-    Advanced,
-    Expert,
-}
-
-/// A practical blueprint
-#[derive(Clone, Debug)]
-pub struct Blueprint {
-    pub name: String,
-    pub creator: u64,
-    pub required_knowledge: Vec<PhenomenonId>,
-    pub required_materials: Vec<(String, f64)>, // (material name, amount)
-    pub procedure: String,
-    pub output: String,
 }
 
 /// Component for player's personal knowledge

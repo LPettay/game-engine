@@ -16,7 +16,7 @@ impl Plugin for ClimatePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ClimateState>()
            .init_resource::<AtmosphereConfig>()
-           .add_systems(Update, update_climate);
+           .add_systems(Update, update_climate.run_if(in_state(crate::GameState::Playing)));
     }
 }
 
@@ -243,7 +243,7 @@ impl Default for ClimateSettings {
         Self {
             dt: 3600.0, // 1 hour
             coriolis_enabled: true,
-            ocean_enabled: true,
+            ocean_enabled: false, // Disabled until ocean systems are implemented
             solar_constant: 1361.0, // Earth average
             albedo: 0.3,
         }

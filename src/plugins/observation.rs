@@ -24,6 +24,7 @@ impl Plugin for ObservationPlugin {
                     update_observation_focus,
                     accumulate_observation_insight,
                     check_observation_discoveries,
+                    cleanup_despawned_observables,
                 )
                     .chain()
                     .run_if(in_state(GameState::Playing)),
@@ -285,6 +286,16 @@ fn tag_vegetation_observable(
     }
 }
 
+/// Remove stale entries from ObservationTracker when Observable entities are despawned
+fn cleanup_despawned_observables(
+    mut tracker: ResMut<ObservationTracker>,
+    mut removals: RemovedComponents<Observable>,
+) {
+    for entity in removals.read() {
+        tracker.insight.retain(|&(e, _), _| e != entity);
+    }
+}
+
 /// Seed environmental observation points on the planet surface
 fn spawn_observation_points(
     mut commands: Commands,
@@ -292,11 +303,14 @@ fn spawn_observation_points(
     mut materials: ResMut<Assets<StandardMaterial>>,
     planet_query: Query<Entity, With<crate::plugins::planet::Planet>>,
     planet_settings: Res<crate::plugins::planet::PlanetSettings>,
+    terrain_noise_res: Option<Res<crate::plugins::terrain::TerrainNoise>>,
 ) {
     let Ok(planet_entity) = planet_query.single() else {
         return;
     };
-    let terrain_noise = crate::plugins::terrain::TerrainNoise::new(planet_settings.terrain_seed);
+    let Some(terrain_noise) = terrain_noise_res else {
+        return;
+    };
 
     // Campfire mesh — small glowing cube
     let campfire_mesh = meshes.add(Cuboid::new(1.0, 0.5, 1.0));

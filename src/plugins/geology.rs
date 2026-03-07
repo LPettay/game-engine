@@ -21,7 +21,7 @@ impl Plugin for GeologyPlugin {
            .add_systems(Update, (
                update_plate_tectonics,
                update_erosion,
-           ).chain());
+           ).chain().run_if(in_state(crate::GameState::Playing)));
     }
 }
 

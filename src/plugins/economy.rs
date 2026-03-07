@@ -22,7 +22,7 @@ impl Plugin for EconomyPlugin {
            .add_systems(Update, (
                update_markets,
                process_trades,
-           ).chain());
+           ).chain().run_if(in_state(crate::GameState::Playing)));
     }
 }
 

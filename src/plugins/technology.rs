@@ -20,7 +20,7 @@ impl Plugin for TechnologyPlugin {
            .add_systems(Update, (
                simulate_circuits,
                update_machines,
-           ).chain());
+           ).chain().run_if(in_state(crate::GameState::Playing)));
     }
 }
 

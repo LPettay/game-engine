@@ -24,7 +24,8 @@ impl Plugin for NetPlugin {
                     client::sync_local_state,
                     transition_from_connecting,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(in_state(GameState::Playing).or(in_state(GameState::Connecting))),
             );
     }
 }

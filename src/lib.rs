@@ -11,5 +11,4 @@ pub enum GameState {
     Loading,
     Connecting,
     Playing,
-    Disconnected,
 }

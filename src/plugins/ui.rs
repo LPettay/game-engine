@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy::pbr::DistanceFog;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use crate::plugins::planet::PlanetSettings;
 use crate::plugins::sun::SunSettings;
@@ -48,7 +47,6 @@ fn debug_ui_system(
     mut planet_settings: ResMut<PlanetSettings>,
     mut sun_settings: ResMut<SunSettings>,
     mut chunk_manager: ResMut<ChunkManager>,
-    _fog_query: Query<&mut DistanceFog>,
     player_query: Query<(&Transform, &Velocity, Option<&OrbitalStats>), With<Player>>,
     state: Res<State<GameState>>,
     time: Res<Time>,

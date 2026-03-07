@@ -179,8 +179,9 @@ fn draw_trajectory(
              let mut drag_accel = Vec3::ZERO;
              
              // Drag constants must match atmosphere.rs EXACTLY
+             // Use rayleigh_scale_height for density falloff (same as atmospheric_drag_system)
              if altitude > 0.0 && altitude < planet_settings.atmosphere_height * 2.0 {
-                 let density = planet_settings.air_density_sea_level * (-altitude / planet_settings.atmosphere_height).exp();
+                 let density = planet_settings.air_density_sea_level * (-altitude / planet_settings.rayleigh_scale_height).exp();
                  let speed = vel.length();
                  if speed > 0.001 {
                      let drag_dir = -vel.normalize();
