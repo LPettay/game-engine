@@ -14,6 +14,18 @@ use crate::plugins::quadtree::{QuadtreeManager, QuadtreeAddress, ChunkState};
 use crate::plugins::voxel::{VoxelConfig, density::VoxelChunkData, dual_contouring};
 use crate::GameState;
 
+/// Resolution scales with depth — low at orbital, high at ground, back down at micro.
+/// This is the single biggest perf win: root chunks drop from 65K to 256 vertices.
+fn resolution_for_depth(depth: u8) -> u32 {
+    match depth {
+        0..=2 => 16,  // Planetary view — 512 tris per chunk
+        3..=5 => 32,  // Orbital — 2K tris
+        6..=8 => 64,  // Flyover — 8K tris
+        9..=12 => 128, // Ground level — 32K tris (hero detail)
+        _ => 64,       // Micro scale — diminishing returns
+    }
+}
+
 pub struct ChunkedTerrainPlugin;
 
 impl Plugin for ChunkedTerrainPlugin {
@@ -30,10 +42,7 @@ impl Plugin for ChunkedTerrainPlugin {
                // Use quadtree system if enabled, otherwise fall back to old system
                update_quadtree_chunks.run_if(quadtree_enabled),
                manage_parent_chunk_visibility.run_if(quadtree_enabled).after(update_quadtree_chunks),
-               // Legacy LOD system removed — quadtree is always active
-               // Temporarily disabled: frustum culling is causing chunks to be incorrectly culled
-               // The chunk loading/unloading system already handles visibility correctly
-               // cull_chunks_outside_frustum,
+               cull_back_hemisphere.run_if(quadtree_enabled).after(update_quadtree_chunks),
            ).run_if(in_state(GameState::Playing)).after(VisibilitySystems::CheckVisibility));
     }
 }
@@ -139,7 +148,7 @@ impl Default for ChunkManager {
         Self {
             chunks: HashMap::new(),
             max_lod_levels: 8,  // More LOD levels for smoother transitions
-            base_chunk_resolution: 256,  // INCREASED: 256x256 vertices per chunk for hyperreal detail
+            base_chunk_resolution: 64,  // Fallback only — quadtree uses resolution_for_depth()
             planet_radius: 20000.0,
             terrain_seed: 12345,
             max_chunks_per_frame: 16,  // Increased for faster close-range detail loading
@@ -300,8 +309,8 @@ fn update_quadtree_chunks(
         let ((min_x, min_y), (max_x, max_y)) = address.bounds_on_face();
         let chunk_size = max_x - min_x;
         
-        // Resolution scales with depth for consistent detail
-        let resolution = chunk_manager.base_chunk_resolution;
+        // Resolution scales with depth — adaptive detail
+        let resolution = resolution_for_depth(address.depth);
         
         // Spawn chunk entity as child of planet (so it rotates with the planet)
         let chunk_entity = commands.spawn((
@@ -417,6 +426,27 @@ fn manage_parent_chunk_visibility(
     }
 }
 
+/// Hide chunks on the far side of the planet via dot-product test.
+/// Only processes chunks that already have meshes (valid GlobalTransform).
+/// ~50% draw call reduction with no visual impact.
+fn cull_back_hemisphere(
+    camera_query: Query<&GlobalTransform, With<Camera3d>>,
+    mut chunk_query: Query<(&GlobalTransform, &mut Visibility), (With<QuadtreeChunk>, With<Mesh3d>)>,
+) {
+    let Ok(cam_transform) = camera_query.single() else { return };
+    let cam_pos = cam_transform.translation();
+    let cam_dir = cam_pos.normalize(); // Direction from planet center to camera
+
+    for (chunk_transform, mut visibility) in chunk_query.iter_mut() {
+        let chunk_dir = chunk_transform.translation().normalize();
+        // Hide chunks on back hemisphere (with margin for large chunks)
+        if cam_dir.dot(chunk_dir) < -0.2 {
+            *visibility = Visibility::Hidden;
+        }
+        // Don't force Visible — other systems manage that
+    }
+}
+
 /// Spawn async task to generate a quadtree chunk
 fn spawn_quadtree_chunk_task(
     address: QuadtreeAddress,
@@ -456,7 +486,14 @@ fn spawn_quadtree_chunk_task(
             observer_scale,
         );
 
-        (mesh, None)
+        // Generate collider for ground-level chunks (depth >= 8, ~500m and smaller)
+        let collider = if address.depth >= 8 {
+            Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh(TriMeshFlags::empty()))
+        } else {
+            None
+        };
+
+        (mesh, collider)
     })
 }
 
@@ -594,6 +631,56 @@ fn generate_quadtree_chunk_mesh(
         }
     }
     
+    // --- Skirt geometry: hide cracks between adjacent LOD levels ---
+    // For each boundary vertex, add a duplicate pushed toward the planet center.
+    // Connect boundary vertices to their skirt counterparts with triangles.
+    let skirt_depth = chunk_world_size * 0.01; // 1% of chunk size
+
+    // Collect boundary vertex indices (edges of the grid)
+    // We process each of the 4 edges in order: bottom, top, left, right
+    let edges: [Vec<u32>; 4] = [
+        // Bottom edge: y=0, x goes 0..resolution
+        (0..resolution).collect(),
+        // Top edge: y=resolution-1, x goes 0..resolution
+        (0..resolution).map(|x| x + (resolution - 1) * resolution).collect(),
+        // Left edge: x=0, y goes 0..resolution
+        (0..resolution).map(|y| y * resolution).collect(),
+        // Right edge: x=resolution-1, y goes 0..resolution
+        (0..resolution).map(|y| (resolution - 1) + y * resolution).collect(),
+    ];
+
+    for edge in &edges {
+        for i in 0..edge.len() {
+            let vi = edge[i] as usize;
+            let pos = Vec3::from_array(positions[vi]);
+            // Push vertex toward planet center (inward) by skirt_depth
+            let world_pos = pos + chunk_center;
+            let inward_dir = world_pos.normalize();
+            let skirt_pos = pos - inward_dir * skirt_depth;
+
+            let skirt_idx = positions.len() as u32;
+            positions.push(skirt_pos.to_array());
+            normals.push(normals[vi]); // Same normal as surface vertex
+            uvs.push(uvs[vi]);
+            colors.push(colors[vi]);
+
+            // Connect this skirt vertex to the next boundary vertex pair
+            if i + 1 < edge.len() {
+                let next_vi = edge[i + 1];
+                let next_skirt_idx = skirt_idx + 1; // Will be created next iteration
+
+                // Two triangles forming a quad between boundary edge and skirt
+                indices.push(edge[i]);
+                indices.push(next_vi);
+                indices.push(skirt_idx);
+
+                indices.push(next_vi);
+                indices.push(next_skirt_idx);
+                indices.push(skirt_idx);
+            }
+        }
+    }
+
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default());
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
@@ -623,16 +710,16 @@ fn process_quadtree_chunk_tasks(
         }
         
         if task.task.is_finished() {
-            if let Some((mesh, _collider)) = future::block_on(future::poll_once(&mut task.task)) {
+            if let Some((mesh, collider)) = future::block_on(future::poll_once(&mut task.task)) {
                 let mesh_handle = meshes.add(mesh);
-                
+
                 // Use shared material
                 let material_handle = chunk_manager.shared_material_handle.clone();
-                
+
                 // Get world center from quadtree
                 let face_dir = QuadtreeManager::face_direction(chunk.address.face);
                 let world_center = chunk.address.world_center(face_dir, chunk_manager.planet_radius);
-                
+
                 if let Some(material) = material_handle {
                     commands.entity(entity).insert((
                         Mesh3d(mesh_handle),
@@ -640,6 +727,11 @@ fn process_quadtree_chunk_tasks(
                         Transform::from_translation(world_center),
                         Visibility::Visible,
                     ));
+                }
+
+                // Attach collider for ground-level chunks (physics walkability)
+                if let Some(collider) = collider {
+                    commands.entity(entity).insert((collider, RigidBody::Fixed));
                 }
                 
                 // Remove task component
