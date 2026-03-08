@@ -22,13 +22,13 @@ struct TerrainMaterial {
     _padding: f32,
 }
 
-@group(2) @binding(0) var<uniform> material: TerrainMaterial;
-@group(2) @binding(1) var heightmap_texture: texture_2d<f32>;
-@group(2) @binding(2) var heightmap_sampler: sampler;
-@group(2) @binding(3) var detail_texture: texture_2d<f32>;
-@group(2) @binding(4) var detail_sampler: sampler;
-@group(2) @binding(5) var normal_texture: texture_2d<f32>;
-@group(2) @binding(6) var normal_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: TerrainMaterial;
+@group(#{MATERIAL_BIND_GROUP}) @binding(1) var heightmap_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(2) var heightmap_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(3) var detail_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(4) var detail_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(5) var normal_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(6) var normal_sampler: sampler;
 
 // ===== VERTEX SHADER WITH DISPLACEMENT =====
 

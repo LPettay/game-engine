@@ -8,6 +8,7 @@ description = "Planet-scale exploration game — The Da Vinci Method"
 bevy = { version = "0.18", default-features = false, features = [
     "bevy_asset", "bevy_render", "bevy_pbr", "bevy_core_pipeline",
     "bevy_winit", "bevy_state", "bevy_gizmos", "bevy_log",
+    "tonemapping_luts",
     "x11",  # X11 for WSL2 (avoids wayland dep)
 ] }
 bevy_egui = "0.39"

@@ -82,6 +82,10 @@ impl Material for PlanetMaterial {
     fn fragment_shader() -> ShaderRef {
         "shaders/planet.wgsl".into()
     }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Opaque
+    }
 }
 
 fn start_planet_generation(mut commands: Commands, planet_settings: Res<PlanetSettings>) {

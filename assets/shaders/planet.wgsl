@@ -8,9 +8,9 @@ struct PlanetMaterial {
     scaling: vec4<f32>, // xy = texture scale, z = roughness, w = metallic
 }
 
-@group(2) @binding(0) var<uniform> material: PlanetMaterial;
-@group(2) @binding(1) var detail_texture: texture_2d<f32>;
-@group(2) @binding(2) var detail_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: PlanetMaterial;
+@group(#{MATERIAL_BIND_GROUP}) @binding(1) var detail_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(2) var detail_sampler: sampler;
 
 // Smooth Triplanar Mapping with power-based blending to reduce seams
 fn triplanar_sample(

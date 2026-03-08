@@ -19,7 +19,10 @@ impl Plugin for UiPlugin {
 fn loading_ui_system(
     mut contexts: EguiContexts,
     state: Res<State<GameState>>,
+    mut ready: Local<bool>,
 ) {
+    // Skip first frame — egui context exists but fonts aren't loaded until after first run()
+    if !*ready { *ready = true; return; }
     if *state.get() == GameState::Loading {
         // Check if context is ready
         if let Ok(ctx) = contexts.ctx_mut() {
