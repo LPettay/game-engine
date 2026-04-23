@@ -1,3 +1,4 @@
+pub mod agent_eyes;
 pub mod planet;
 pub mod camera;
 pub mod player;

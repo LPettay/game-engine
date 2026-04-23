@@ -159,9 +159,10 @@ fn check_planet_generation(
                 Planet,
             )).id();
 
-            // Ocean Sphere
+            // Ocean Sphere — slightly below terrain surface so land is visible
+            let ocean_radius = planet_settings.radius * 0.995;
             commands.spawn((
-                Mesh3d(meshes.add(Sphere::new(planet_settings.radius).mesh().ico(6).unwrap())),
+                Mesh3d(meshes.add(Sphere::new(ocean_radius).mesh().ico(6).unwrap())),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgba(0.0, 0.2, 0.8, 0.6),
                     alpha_mode: AlphaMode::Blend,

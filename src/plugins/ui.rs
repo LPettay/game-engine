@@ -9,9 +9,19 @@ use crate::GameState; // Added
 
 pub struct UiPlugin;
 
+#[derive(Resource)]
+pub struct DebugUiVisible(pub bool);
+
+impl Default for DebugUiVisible {
+    fn default() -> Self {
+        Self(true)
+    }
+}
+
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin::default())
+           .init_resource::<DebugUiVisible>()
            .add_systems(Update, (debug_ui_system, loading_ui_system, journal_ui_system));
     }
 }
@@ -57,8 +67,9 @@ fn debug_ui_system(
     gpu_settings: Option<Res<GpuTerrainSettings>>,
     mut sim_config: ResMut<SimulationConfig>,
     terrain_noise: Option<Res<crate::plugins::terrain::TerrainNoise>>,
+    debug_visible: Res<DebugUiVisible>,
 ) {
-    if *state.get() == GameState::Loading {
+    if *state.get() == GameState::Loading || !debug_visible.0 {
         return;
     }
     
@@ -106,7 +117,9 @@ fn debug_ui_system(
         
         ui.label(format!("FPS: {:.1}", fps));
         ui.label(format!("Frame Time: {:.2} ms", frame_time_ms));
-        ui.label(format!("Active Chunks: {}", chunk_manager.chunks.len()));
+        ui.label(format!("Quadtree Chunks: {}", chunk_manager.quadtree_chunks.len()));
+        ui.label(format!("Quadtree Nodes: {}", chunk_manager.quadtree.nodes.len()));
+        ui.label(format!("Legacy Chunks: {}", chunk_manager.chunks.len()));
         ui.label(format!("Loaded Chunks: {}", loaded_chunks));
         ui.label(format!("Generating Chunks: {}", generating_chunks));
         ui.label(format!("Max Active Chunks: {}", chunk_manager.max_active_chunks));

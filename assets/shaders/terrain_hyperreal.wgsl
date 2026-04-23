@@ -220,43 +220,35 @@ fn fragment(
         final_normal = normalize(mix(in.world_normal, sampled_normal, normal_blend));
     }
     
-    // Build PBR input
-    var pbr_input: pbr_types::PbrInput;
-    var pbr_material: pbr_types::StandardMaterial;
-    
+    // Build PBR input using Bevy's default constructor
+    var pbr_input = pbr_types::pbr_input_new();
+
     // Apply detail modulation to vertex color
     let detail_intensity = 0.3 * (1.0 - dist_to_camera / 1000.0);
     let detail_mod = mix(vec3<f32>(1.0), combined_detail * 1.5, max(detail_intensity, 0.0));
-    
+
     #ifdef VERTEX_COLORS
-        pbr_material.base_color = vec4<f32>(in.color.rgb * detail_mod, in.color.a);
+        pbr_input.material.base_color = vec4<f32>(in.color.rgb * detail_mod, in.color.a);
     #else
-        pbr_material.base_color = vec4<f32>(detail_mod, 1.0);
+        pbr_input.material.base_color = vec4<f32>(detail_mod, 1.0);
     #endif
-    
-    pbr_material.emissive = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    pbr_material.perceptual_roughness = material.params.z;
-    pbr_material.metallic = material.params.w;
-    pbr_material.reflectance = 0.5;
-    pbr_material.alpha_cutoff = 0.0;
-    pbr_material.flags = 0u;
-    
+
+    pbr_input.material.perceptual_roughness = material.params.z;
+    pbr_input.material.metallic = material.params.w;
+
     // Vary roughness with detail texture
-    pbr_material.perceptual_roughness = mix(
-        pbr_material.perceptual_roughness,
+    pbr_input.material.perceptual_roughness = mix(
+        pbr_input.material.perceptual_roughness,
         1.0,
         combined_detail.r * 0.3 * fine_blend
     );
-    
-    pbr_input.material = pbr_material;
+
     pbr_input.frag_coord = in.position;
     pbr_input.world_position = in.world_position;
     pbr_input.world_normal = pbr_functions::prepare_world_normal(final_normal, false, is_front);
-    pbr_input.is_orthographic = false;
     pbr_input.N = pbr_input.world_normal;
     pbr_input.V = view_dir;
-    pbr_input.flags = 0u;
-    
+
     return pbr_functions::apply_pbr_lighting(pbr_input);
 }
 

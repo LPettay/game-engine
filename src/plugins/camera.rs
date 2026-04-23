@@ -22,14 +22,12 @@ pub enum CameraState {
 }
 
 #[derive(Component)]
-struct OrbitalCamera {
-    distance: f32,
-    pitch: f32,
-    yaw: f32,
-    // Added for 3rd person zoom
-    third_person_distance: f32,
-    // FreeCam position (independent of player)
-    freecam_position: Option<Vec3>,
+pub struct OrbitalCamera {
+    pub distance: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+    pub third_person_distance: f32,
+    pub freecam_position: Option<Vec3>,
 }
 
 fn setup_camera(mut commands: Commands) {

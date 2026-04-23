@@ -60,15 +60,23 @@ fn sync_detail_texture(
     planet_material_query: Query<&MeshMaterial3d<PlanetMaterial>, With<Planet>>,
     mut materials: ResMut<Assets<PlanetMaterial>>,
 ) {
-    // Only update if we don't have a texture yet
+    // Try to get texture from planet material
     if chunk_manager.detail_texture_handle.is_none() {
         if let Ok(material_handle) = planet_material_query.single() {
             if let Some(material) = materials.get(&material_handle.0) {
-                chunk_manager.detail_texture_handle = Some(material.detail_texture.clone());
+                let texture = material.detail_texture.clone();
+                chunk_manager.detail_texture_handle = Some(texture.clone());
+
+                // If shared material was already created with bad texture, update it
+                if let Some(ref shared_handle) = chunk_manager.shared_material_handle {
+                    if let Some(shared_mat) = materials.get_mut(shared_handle) {
+                        shared_mat.detail_texture = texture;
+                    }
+                }
             }
         }
     }
-    
+
     // Create shared material if we don't have one yet
     if chunk_manager.shared_material_handle.is_none() {
         let detail_texture = chunk_manager.detail_texture_handle.clone().unwrap_or_default();
@@ -77,6 +85,8 @@ fn sync_detail_texture(
             detail_texture,
         });
         chunk_manager.shared_material_handle = Some(shared_material);
+        info!("AgentEyes: created shared_material_handle (has_texture: {})",
+            chunk_manager.detail_texture_handle.is_some());
     }
 }
 
@@ -151,8 +161,8 @@ impl Default for ChunkManager {
             base_chunk_resolution: 64,  // Fallback only — quadtree uses resolution_for_depth()
             planet_radius: 20000.0,
             terrain_seed: 12345,
-            max_chunks_per_frame: 16,  // Increased for faster close-range detail loading
-            max_active_chunks: 384,    // More chunks for aggressive subdivision
+            max_chunks_per_frame: 8,   // Budget: max 8 mesh generations per frame
+            max_active_chunks: 512,    // Hard cap on entities
             detail_texture_handle: None,
             shared_material_handle: None,
             current_lod_per_face: [None; 6],
@@ -164,7 +174,7 @@ impl Default for ChunkManager {
             use_quadtree: true,
             quadtree: QuadtreeManager::default(),
             quadtree_chunks: HashMap::new(),
-            max_subdivisions_per_frame: 8, // 8 subdivisions × 4 children = max 32 new nodes/frame
+            max_subdivisions_per_frame: 4, // 4 subdivisions × 4 children = max 16 new nodes/frame
         }
     }
 }
@@ -703,13 +713,25 @@ fn process_quadtree_chunk_tasks(
     
     let mut processed = 0;
     let max_per_frame = chunk_manager.max_chunks_per_frame;
-    
+    let pending_tasks = chunk_query.iter().count();
+    if pending_tasks > 0 {
+        info!("AgentEyes: process_quadtree_chunk_tasks — {} pending tasks, material={}",
+              pending_tasks, chunk_manager.shared_material_handle.is_some());
+    }
+
     for (entity, chunk, mut task) in chunk_query.iter_mut() {
         if processed >= max_per_frame {
             break;
         }
-        
-        if task.task.is_finished() {
+
+        let finished = task.task.is_finished();
+        if !finished && processed == 0 {
+            // Log once per frame if tasks exist but aren't finishing
+            info!("AgentEyes: task for depth={} face={} not finished yet",
+                  chunk.address.depth, chunk.address.face);
+        }
+
+        if finished {
             if let Some((mesh, collider)) = future::block_on(future::poll_once(&mut task.task)) {
                 let mesh_handle = meshes.add(mesh);
 
@@ -720,6 +742,9 @@ fn process_quadtree_chunk_tasks(
                 let face_dir = QuadtreeManager::face_direction(chunk.address.face);
                 let world_center = chunk.address.world_center(face_dir, chunk_manager.planet_radius);
 
+                info!("AgentEyes: inserting mesh for chunk depth={} face={} at {:?} (has_material={})",
+                      chunk.address.depth, chunk.address.face, world_center, material_handle.is_some());
+
                 if let Some(material) = material_handle {
                     commands.entity(entity).insert((
                         Mesh3d(mesh_handle),
@@ -727,16 +752,18 @@ fn process_quadtree_chunk_tasks(
                         Transform::from_translation(world_center),
                         Visibility::Visible,
                     ));
+                } else {
+                    warn!("AgentEyes: chunk mesh ready but no shared material — skipping entity {entity:?}");
                 }
 
                 // Attach collider for ground-level chunks (physics walkability)
                 if let Some(collider) = collider {
                     commands.entity(entity).insert((collider, RigidBody::Fixed));
                 }
-                
+
                 // Remove task component
                 commands.entity(entity).remove::<QuadtreeChunkTask>();
-                
+
                 // Mark as generated in quadtree
                 chunk_manager.quadtree.set_generated(task.address);
                 chunk_manager.quadtree.set_entity(task.address, entity);

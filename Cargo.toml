@@ -16,6 +16,8 @@ bevy_rapier3d = "0.33"
 noise = "0.9"
 bytemuck = { version = "1.14", features = ["derive"] }
 futures-lite = "2.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # SpacetimeDB (client SDK for multiplayer) — add when Task #3 begins
 # spacetimedb-sdk = "2.0"

@@ -76,6 +76,8 @@ fn main() {
             plugins::telemetry::TelemetryPlugin,
             plugins::indicator::IndicatorPlugin,
         ))
+        // Agent diagnostics
+        .add_plugins(plugins::agent_eyes::AgentEyesPlugin)
         .init_state::<GameState>()
         .run();
 }

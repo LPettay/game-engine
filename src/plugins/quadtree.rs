@@ -240,9 +240,9 @@ impl Default for QuadtreeManager {
     fn default() -> Self {
         Self {
             nodes: HashMap::new(),
-            subdivision_threshold: 8.0,  // Subdivide when closer than 8x chunk size (very aggressive)
-            merge_threshold: 12.0,       // Merge when farther than 12x parent size (hysteresis)
-            max_depth: 20,               // Allow very deep subdivision for infinite scale
+            subdivision_threshold: 4.0,  // Subdivide when closer than 4x chunk size
+            merge_threshold: 6.0,        // Merge when farther than 6x parent size (hysteresis)
+            max_depth: 12,               // Cap at ground-level detail (depth 12 ≈ 5m chunks)
             radius: 20000.0,
         }
     }
@@ -368,10 +368,15 @@ impl QuadtreeManager {
         // --- Pass 2: sort candidates by distance, apply budget, execute ---
         subdiv_candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
+        // Enforce budget AND total node cap (prevent unbounded growth)
+        let total_nodes = self.nodes.len();
+        let headroom = if total_nodes < 2000 { 2000 - total_nodes } else { 0 };
+        let max_new_nodes = headroom / 4; // Each subdivision creates 4 children
+
         let limit = if max_subdivisions > 0 {
-            max_subdivisions
+            max_subdivisions.min(max_new_nodes)
         } else {
-            subdiv_candidates.len() // unlimited
+            max_new_nodes
         };
 
         for (address, _distance) in subdiv_candidates.into_iter().take(limit) {

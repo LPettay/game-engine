@@ -79,38 +79,32 @@ fn fragment(
     in: VertexOutput,
     @builtin(front_facing) is_front: bool,
 ) -> @location(0) vec4<f32> {
-    // Manually construct PbrInput using qualified types
-    var pbr_input: pbr_types::PbrInput;
+    // Use Bevy's default PbrInput constructor (initializes all fields correctly)
+    var pbr_input = pbr_types::pbr_input_new();
 
-    // Initialize Material
-    var pbr_material: pbr_types::StandardMaterial;
-    pbr_material.base_color = in.color;
-    pbr_material.emissive = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    pbr_material.perceptual_roughness = material.scaling.z;
-    pbr_material.metallic = material.scaling.w;
-    pbr_material.reflectance = 0.5;
-    pbr_material.alpha_cutoff = 0.0;
-    pbr_material.flags = 0u; 
-    
+    // Override material properties we care about
+    pbr_input.material.base_color = in.color;
+    pbr_input.material.perceptual_roughness = material.scaling.z;
+    pbr_input.material.metallic = material.scaling.w;
+
     // Triplanar Noise with improved sampling
-    let noise_scale = material.scaling.x; 
+    let noise_scale = material.scaling.x;
     let soft_lighting = material.scaling.y; // 0.0 or 1.0
 
     // Use higher frequency noise for finer detail
     let noise = triplanar_sample(in.world_position.xyz, in.world_normal, noise_scale);
     let noise_fine = triplanar_sample(in.world_position.xyz * 4.0, in.world_normal, noise_scale * 4.0);
     let noise_micro = triplanar_sample(in.world_position.xyz * 16.0, in.world_normal, noise_scale * 16.0);
-    
+
     // Combine multiple octaves for richer detail (3 octaves for hyperreal)
     let combined_noise = noise * 0.5 + noise_fine * 0.35 + noise_micro * 0.15;
-    
+
     // Modulate Base Color with moderate intensity
     let detail_intensity = 0.25;
-    let detail_mod = mix(vec3<f32>(1.0), combined_noise * 1.5, detail_intensity); 
-    pbr_material.base_color = vec4<f32>(pbr_material.base_color.rgb * detail_mod, pbr_material.base_color.a);
+    let detail_mod = mix(vec3<f32>(1.0), combined_noise * 1.5, detail_intensity);
+    pbr_input.material.base_color = vec4<f32>(pbr_input.material.base_color.rgb * detail_mod, pbr_input.material.base_color.a);
 
     // Apply procedural normal mapping for surface detail
-    // This adds micro-detail without needing geometry
     let normal_scale = noise_scale * 8.0;
     let normal_strength = 0.3;
     var perturbed_normal = procedural_normal_detail(
@@ -119,7 +113,7 @@ fn fragment(
         normal_scale,
         normal_strength
     );
-    
+
     // Add finer normal detail at close range
     let fine_normal = procedural_normal_detail(
         in.world_position.xyz,
@@ -131,29 +125,24 @@ fn fragment(
 
     if (soft_lighting > 0.5) {
         // Soft lighting mode: Make it fully emissive
-        pbr_material.emissive = vec4<f32>(pbr_material.base_color.rgb * 0.5, 1.0);
-        pbr_material.perceptual_roughness = 1.0;
-        pbr_material.reflectance = 0.0;
+        pbr_input.material.emissive = vec4<f32>(pbr_input.material.base_color.rgb * 0.5, 1.0);
+        pbr_input.material.perceptual_roughness = 1.0;
+        pbr_input.material.reflectance = vec3<f32>(0.0);
     } else {
         // Default PBR with enhanced detail
         // Vary roughness based on noise for material variation
-        pbr_material.perceptual_roughness = mix(
-            pbr_material.perceptual_roughness * 0.8,
-            pbr_material.perceptual_roughness * 1.2,
+        pbr_input.material.perceptual_roughness = mix(
+            pbr_input.material.perceptual_roughness * 0.8,
+            pbr_input.material.perceptual_roughness * 1.2,
             combined_noise.r
         );
-        pbr_material.perceptual_roughness = clamp(pbr_material.perceptual_roughness, 0.1, 1.0);
+        pbr_input.material.perceptual_roughness = clamp(pbr_input.material.perceptual_roughness, 0.1, 1.0);
     }
-
-    pbr_material.metallic = material.scaling.w;
-    pbr_material.alpha_cutoff = 0.0;
-
-    pbr_input.material = pbr_material;
 
     // PBR Environment Setup
     pbr_input.frag_coord = in.position;
     pbr_input.world_position = vec4<f32>(in.world_position.xyz, 1.0);
-    
+
     // Use perturbed normal for lighting calculations
     pbr_input.world_normal = pbr_functions::prepare_world_normal(
         perturbed_normal,
@@ -164,7 +153,6 @@ fn fragment(
     pbr_input.is_orthographic = bevy_pbr::mesh_view_bindings::view.clip_from_view[3].w == 1.0;
     pbr_input.N = pbr_input.world_normal;
     pbr_input.V = pbr_functions::calculate_view(in.world_position, pbr_input.is_orthographic);
-    pbr_input.flags = 0u;
-    
+
     return pbr_functions::apply_pbr_lighting(pbr_input);
 }
